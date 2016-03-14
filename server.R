@@ -247,6 +247,122 @@ shinyServer( function(input, output) {
              }
            })
   })
+  
+  # Marker data output for GS
+  markerData3 <- reactive({
+    # Conditions
+    ifelse(!any(c("real", "simulated", "historical") %in% input$gs_data_type),
+           {return(NULL)},
+           {
+             # Condition for real data
+             if (input$gs_data_type == "real") {
+               if(any(is.null(input$geno_file3), is.null(input$pheno_file3))) {
+                 return(NULL)
+               }
+               
+               M <- read.csv(input$geno_file3$datapath, header = T, row.names = 1)
+               K <- A.mat(M)
+               Y <- read.csv(input$pheno_file3$datapath, header = T, row.names = 1)
+               
+               return(list(geno = geno, K = K, pheno = pheno))
+             }
+             
+             # Condition for historical data
+             if (input$gs_data_type == "historical") {
+               
+               line.names <- row.names(M)
+               n.pop <- length(line.names)
+               
+               # Size of the training pop
+               n.TP <- input$cv_tp
+               # Size of selection set
+               n.VP <- n.pop - n.TP
+               
+               # Find the TP and VP lines
+               TP.lines <- sample(line.names, size = n.TP)
+               VP.lines <- setdiff(line.names, TP.lines)
+               
+               # Pull out data
+               Y <- data.frame(row.names = CAP.pheno[,1], trait = CAP.pheno[,2])
+               Y <- subset(Y, subset = row.names(Y) %in% row.names(M))
+               
+               # Create model parameters
+               y.TP <- Y[TP.lines,]
+               y.VP <- Y[VP.lines,]
+               Z.TP <- M[TP.lines,]
+               Z.VP <- M[VP.lines,]
+               
+               solve.out <- mixed.solve(y = y.TP, Z = Z.TP)
+               mar.eff <- as.matrix(solve.out$u)
+               # Calculate GEBVs
+               GEBV <- Z.VP %*% mar.eff
+               
+               # Return a list
+               return(list(mar.eff = mar.eff, GEBV = GEBV, y.VP = y.VP))
+             }
+             
+             # Condition on simulated data
+             if (input$gs_data_type == "simulated") {
+               # Simulate marker data
+               # Gather info
+               m <- input$gs_n.markers
+               n <- input$gs_n.genos
+               
+               # Simulate
+               M <- t(sapply(X = 1:n, FUN = function(x) ifelse(runif(m) < 0.5, -1, 1)))
+               row.names(M) <- paste("G", 1:n, sep = "")
+               
+               # Simulate QTL
+               # Gather info
+               ifelse(!any(c("yld", "ht", "dp") %in% input$trait_presets3),
+                      {
+                        n.QTL <- input$gs_n.qtl
+                        h2 <- input$gs_h2
+                      },
+                      {
+                        if (input$trait_presets3 == "yld") n.QTL = 50; h2 = 0.25
+                        if (input$trait_presets3 == "ht") n.QTL = 25; h2 = 0.5
+                        if (input$trait_presets3 == "dp") n.QTL = 10; h2 = 0.75
+                      })
+               
+               QTL <- sample(m, n.QTL)
+               u <- rep(0, m) # marker effects
+               u[QTL] <- 1 # Assign QTL effects
+               
+               # Genotype values
+               g <- as.vector(crossprod(t(M), u))
+               Y <- g + rnorm(n, mean = 0, sd = sqrt((1-h2)/h2*var(g)))
+               Y <- data.frame(row.names = row.names(M), trait = Y)
+               
+               # Start predictions
+               line.names <- row.names(M)
+               n.pop <- length(line.names)
+               
+               # Size of the training pop
+               n.TP <- input$cv_tp
+               # Size of selection set
+               n.VP <- n.pop - n.TP
+               
+               # Find the TP and VP lines
+               TP.lines <- sample(line.names, size = n.TP)
+               VP.lines <- setdiff(line.names, TP.lines)
+               
+               # Create model parameters
+               y.TP <- Y[TP.lines,]
+               y.VP <- Y[VP.lines,]
+               Z.TP <- M[TP.lines,]
+               Z.VP <- M[VP.lines,]
+               
+               solve.out <- mixed.solve(y = y.TP, Z = Z.TP)
+               mar.eff <- as.matrix(solve.out$u)
+               # Calculate GEBVs
+               GEBV <- Z.VP %*% mar.eff
+               
+               return(list(mar.eff = mar.eff, GEBV = GEBV, y.VP = y.VP))
+             }
+           })
+    
+  })
 
 
   # Plot the trait data
@@ -309,6 +425,41 @@ shinyServer( function(input, output) {
       manhattan(tmp, fdr.level = input$gwas_FDR)
     }
   })
+  
+  # Output GS results
+  output$pred_plot <- renderPlot({
+    
+    if(!is.null(markerData3())) {
+      GEBV <- markerData3()$GEBV
+      y.VP <- markerData3()$y.VP
+      plot(GEBV, y.VP, 
+           main = "Genomic Prediction Accuracy",
+           xlab = "Genomic Estimated Breeding Value",
+           ylab = "Observed Phenotype")
+      abline(lm(y.VP~GEBV))
+    }
+  })
+  
+  output$gebv <- renderPlot({
+    
+    if (!is.null(markerData3())) {
+      GEBV <- markerData3()$GEBV
+      hist(GEBV,
+           main = "Distribution of Breeding Values"
+      )
+    }
+  })
+  
+  output$pred_r <- renderText({
+    
+    if (!is.null(markerData3())) {
+      GEBV <- markerData3()$GEBV
+      y.VP <- markerData3()$y.VP
+      cor(GEBV, y.VP, use = "complete.obs")
+    }
+  })
+  
+  
 })
 
 

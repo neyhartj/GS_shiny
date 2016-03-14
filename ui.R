@@ -325,14 +325,94 @@ shinyUI(navbarPage("Simple Quantitative Genomics",
                                               min = 10,
                                               max = 500
                                   )
+                                ),
+                                
+                                conditionalPanel(
+                                  condition = "input.gs_data_type == 'simulated'",
+                                  
+                                  # Add some radio buttons for trait presets
+                                  helpText("Here are some commonly measured traits in barley. Each has
+                                           a preset as to the heritability, number of QTL, and a constant genetic variance."),
+                                  
+                                  radioButtons("trait_presets3",
+                                               label = "Trait Presets or Custom",
+                                               choices = c(
+                                                 "Yield (h2 = 0.25, #.QTL = 50)" = "yld",
+                                                 "Height (h2 = 0.50, #.QTL = 25)" = "ht",
+                                                 "Diastatic Power (h2 = 0.75, #.QTL = 10)" = "dp",
+                                                 "Custom" = "custom"
+                                               ),
+                                               selected = "yld"
+                                  )
+                                ),
+                                
+                                conditionalPanel(
+                                  condition = "input.gs_data_type == 'simulated' && input.trait_presets3 == 'custom'",
+                                  
+                                  # Number of QTL
+                                  helpText("Just like GWAS, genomic prediction depends
+                                           on a number of factors, including the number of QTL underlying a trait, the
+                                           heritability of the trait, the number of markers assayed, and the number of 
+                                           individuals observed. Use the following sliders to adjust these parameters:"
+                                  ),
+                                  
+                                  sliderInput("gs_n.qtl",
+                                              "Number of QTL:",
+                                              value = 5,
+                                              min = 1,
+                                              max = 50 
+                                  ),
+                                  
+                                  sliderInput("gs_h2",
+                                              "Heritability:",
+                                              value = 0.5,
+                                              min = 0.01,
+                                              max = 1
+                                  ),
+                                  
+                                  sliderInput("gs_n.markers",
+                                              "Number of markers",
+                                              value = 350,
+                                              min = 7,
+                                              max = 2000
+                                  ),
+                                  
+                                  sliderInput("gs_n.genos",
+                                              "Population Size",
+                                              value = 500,
+                                              min = 10,
+                                              max = 500
+                                  )
+                                  
+                                ), 
+                                
+                                conditionalPanel(
+                                  condition = "input.gs_data_type == 'real'",
+                                  
+                                  # Input options for trait data
+                                  helpText("Upload a .csv of data on the plant traits (phenotypes)"
+                                  ),
+                                  fileInput(inputId = "pheno_file3",
+                                            label = "Upload Phenotype File",
+                                            accept = c('.csv')
+                                  ),
+                                  
+                                  # Input for marker data
+                                  fileInput("geno_file3",
+                                            label = "Upload Marker Genotype File",
+                                            accept = c('.csv')
+                                  )
                                 )
+                                
+                                
                               ),
                               
                               # Main panel
                               mainPanel(
                                 tabsetPanel(type = "tabs",
                                             tabPanel("Breeding Value Distribution", plotOutput("gebv")),
-                                            tabPanel("Prediction Accuracy")
+                                            tabPanel("Prediction Plot", plotOutput("pred_plot")),
+                                            tabPanel("Prediction Accuracy", verbatimTextOutput("pred_r"))
                                 )
                               )
                             )
